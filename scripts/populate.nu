@@ -36,7 +36,14 @@ def main [
     print $"Wrote ($entries | length) entries to ($out)."
 }
 
-# Match the slugging the mirror used: lowercase, `:` and `.` → `-`.
+# Match the slugging the mirror used: lowercase, `:` and `.` → `-`. Also strip
+# characters that break `use clients/<name>.nu` parsing — spaces become `-`,
+# parens/brackets are dropped — so names pass validate-unique-names in generate.nu.
 def slug [s: string]: nothing -> string {
-    $s | str downcase | str replace --all ':' '-' | str replace --all '.' '-'
+    $s
+    | str downcase
+    | str replace --all ':' '-'
+    | str replace --all '.' '-'
+    | str replace --all ' ' '-'
+    | str replace --all --regex '[()\[\]{}]' ''
 }
