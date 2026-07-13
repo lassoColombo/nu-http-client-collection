@@ -28,6 +28,7 @@ def main [
         }
         | compact
         | sort-by name
+        | dedup-names
     )
 
     let tmp = $"($out).tmp"
@@ -39,11 +40,28 @@ def main [
 # Match the slugging the mirror used: lowercase, `:` and `.` → `-`. Also strip
 # characters that break `use clients/<name>.nu` parsing — spaces become `-`,
 # parens/brackets are dropped — so names pass validate-unique-names in generate.nu.
+# Slugging can map distinct upstream keys to the same name (e.g. `Marketplace-APIs`
+# and `Marketplace-APIs-` both trim to `marketplace-apis`). Keep the first occurrence
+# and suffix later collisions with `-2`, `-3`, … so names stay globally unique.
+def dedup-names []: list -> list {
+    $in | reduce --fold { seen: {}, out: [] } {|c, acc|
+        let n = $c.name
+        let count = ($acc.seen | get -o $n | default 0)
+        let name = (if $count == 0 { $n } else { $"($n)-($count + 1)" })
+        {
+            seen: ($acc.seen | upsert $n ($count + 1))
+            out: ($acc.out | append ($c | update name $name))
+        }
+    } | get out
+}
+
 def slug [s: string]: nothing -> string {
     $s
-    | str downcase
+    | str lowercase
     | str replace --all ':' '-'
     | str replace --all '.' '-'
     | str replace --all ' ' '-'
     | str replace --all --regex '[()\[\]{}]' ''
+    | str replace --all --regex '-+' '-'
+    | str trim --char '-'
 }
